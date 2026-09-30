@@ -1,51 +1,125 @@
 {
-    "appid": "ffffffff-ffff-4fff-afff-ffffffffffff",
-    "name": "Example App Name",
-    "description": "Brief description of the app",
-    "type": "information",
-    "product_vendor": "Vendor Name",
-    "logo": "logo.svg",
-    "logo_dark": "logo_dark.svg",
-    "product_name": "Product Name",
+    "appid": "b7ec5197-94d0-4d54-ab36-911625bf8c20",
+    "name": "CIRCL Hash Lookup",
+    "description": "This app allows the leveraging CIRCL hash look up database",
+    "type": "reputation",
+    "product_vendor": "Arminius Technologies LLC",
+    "logo": "circlhashlookup.svg",
+    "logo_dark": "circlhashlookup_dark.svg",
+    "product_name": "CIRCL Hash Lookup",
+    "pip313_dependencies": {
+        "wheel": []
+    },
+    "python_version": "3.13",
     "product_version_regex": ".*",
-    "publisher": "Splunk",
-    "license": "Copyright (c) 2025 Splunk Inc.",
-    "app_version": "1.0.1",
-    "latest_tested_versions": [
-        "Version X.Y.Z, Month Year"
+    "publisher": "Arminius Technologies LLC",
+    "contributors": [
+        {
+            "name": "Arminius Technologies LLC"
+        }
     ],
-    "utctime_updated": "2025-08-01T20:30:47.300351Z",
+    "license": "Copyright (c) Arminius Technologies, 2026",
+    "app_version": "1.0.0",
+    "utctime_updated": "2026-09-18T02:48:33.990228Z",
     "package_name": "phantom_circlhashlookup",
     "main_module": "circlhashlookup_connector.py",
-    "app_config_render": "default",
-    "min_phantom_version": "6.3.0",
-    "python_version": "3.9, 3.13",
-    "fips_compliant": true,
+    "min_phantom_version": "7.4.0",
     "app_wizard_version": "1.0.0",
-    "configuration": {
-        "host": {
-            "data_type": "string",
-            "order": 0,
-            "description": "Example Hostname or IP address",
-            "required": true
-        },
-        "api_key": {
-            "data_type": "string",
-            "order": 1,
-            "description": "Example API Key for authentication",
-            "required": true
-        }
-    },
+    "configuration": {},
     "actions": [
         {
             "action": "test connectivity",
             "identifier": "test_connectivity",
-            "description": "Validate the asset configuration for connectivity",
+            "description": "Validate the asset configuration for connectivity using supplied configuration",
+            "verbose": "",
             "type": "test",
             "read_only": true,
             "parameters": {},
             "output": [],
             "versions": "EQ(*)"
+        },
+        {
+            "action": "file reputation",
+            "identifier": "file_reputation",
+            "description": "Queries for file reputation info",
+            "verbose": "",
+            "type": "investigate",
+            "read_only": true,
+            "parameters": {
+                "hash": {
+                    "description": "File hash to query",
+                    "data_type": "string",
+                    "required": true,
+                    "primary": true,
+                    "contains": [
+                        "hash",
+                        "sha256",
+                        "sha1",
+                        "md5"
+                    ],
+                    "value_list": [],
+                    "default": "",
+                    "order": 0,
+                    "name": "hash",
+                    "id": 1,
+                    "param_name": "hash"
+                }
+            },
+            "output": [
+                {
+                    "data_path": "action_result.parameter.hash",
+                    "data_type": "string",
+                    "contains": [
+                        "hash",
+                        "sha256",
+                        "sha1",
+                        "md5"
+                    ],
+                    "column_name": "hash",
+                    "column_order": 0
+                },
+                {
+                    "data_path": "action_result.status",
+                    "data_type": "string",
+                    "column_name": "status",
+                    "column_order": 1
+                },
+                {
+                    "data_path": "action_result.message",
+                    "data_type": "string"
+                },
+                {
+                    "data_path": "summary.total_objects",
+                    "data_type": "numeric"
+                },
+                {
+                    "data_path": "action_result.data.*.parents.*.PackageDescription",
+                    "data_type": "string"
+                },
+                {
+                    "data_path": "action_result.data.*.PackageDescription",
+                    "data_type": "string"
+                },
+                {
+                    "data_path": "action_result.data.*.hashlookup:trust",
+                    "data_type": "string"
+                },
+                {
+                    "data_path": "action_result.data.*.source",
+                    "data_type": "string"
+                },
+                {
+                    "data_path": "summary.total_objects_successful",
+                    "data_type": "numeric"
+                }
+            ],
+            "render": {
+                "type": "table"
+            },
+            "versions": "EQ(*)"
         }
-    ]
+    ],
+    "pip39_dependencies": {
+        "wheel": []
+    }
 }

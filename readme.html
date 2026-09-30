@@ -1,0 +1,260 @@
+<!--
+ Copyright (c) 2026 Splunk Inc.
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+<h2>CIRCL Hash Lookup</h2>
+<p>
+  This app queries the public CIRCL hashlookup service for information
+  about MD5, SHA-1, and SHA-256 file hashes.
+</p>
+<h3>Configuration</h3>
+<p>
+  The public CIRCL service does not require an API key. The app connects
+  to:
+</p>
+<p>
+  <a href="https://hashlookup.circl.lu">https://hashlookup.circl.lu</a>
+</p>
+<h3>Supported hashes</h3>
+<ul>
+  <li>MD5 — 32 hexadecimal characters</li>
+  <li>SHA-1 — 40 hexadecimal characters</li>
+  <li>SHA-256 — 64 hexadecimal characters</li>
+</ul>
+<h3>Understanding the results</h3>
+<p>
+  A match means the hash was found in one of CIRCL's indexed datasets.
+  It does not by itself prove that the file is safe or malicious.
+</p>
+<p>
+  The <code>hashlookup:trust</code> value ranges from 0 to 100.
+  A value of 50 is neutral. Values above 50 indicate that the file
+  appears in more known sources.
+</p>
+<h3>Hash not found</h3>
+<p>
+  A hash that is not present in CIRCL is returned as a successful lookup
+  with <code>found=false</code>. Absence from the database does not mean
+  the file is malicious or safe.
+</p>
+<h3>Action output data paths</h3>
+<p>
+  The following data paths can be used in playbooks to access results
+  returned by the <strong>file reputation</strong> action. Some fields
+  are only present when CIRCL has that information.
+</p>
+<table border="1" cellpadding="6" cellspacing="0">
+  <thead>
+    <tr>
+      <th>Data path</th>
+      <th>Type</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>
+        <code>action_result.status</code>
+      </td>
+      <td>String</td>
+      <td>Indicates whether the action succeeded or failed.</td>
+    </tr>
+    <tr>
+      <td>
+        <code>action_result.message</code>
+      </td>
+      <td>String</td>
+      <td>Human-readable result message.</td>
+    </tr>
+    <tr>
+      <td>
+        <code>action_result.summary.found</code>
+      </td>
+      <td>Boolean</td>
+      <td>
+        <code>true</code> when CIRCL found the hash and
+        <code>false</code> when no record was found.
+      </td>
+    </tr>
+    <tr>
+      <td>
+        <code>action_result.summary.hash</code>
+      </td>
+      <td>String</td>
+      <td>The normalized hash submitted to CIRCL.</td>
+    </tr>
+    <tr>
+      <td>
+        <code>action_result.summary.hash_type</code>
+      </td>
+      <td>String</td>
+      <td>
+        The detected hash format:
+        <code>md5</code>, <code>sha1</code>, or
+        <code>sha256</code>.
+      </td>
+    </tr>
+    <tr>
+      <td>
+        <code>action_result.data.*.FileName</code>
+      </td>
+      <td>String</td>
+      <td>The known filename associated with the hash.</td>
+    </tr>
+    <tr>
+      <td>
+        <code>action_result.data.*.FileSize</code>
+      </td>
+      <td>String</td>
+      <td>The file size in bytes, when available.</td>
+    </tr>
+    <tr>
+      <td>
+        <code>action_result.data.*.MD5</code>
+      </td>
+      <td>String</td>
+      <td>The MD5 hash associated with the file.</td>
+    </tr>
+    <tr>
+      <td>
+        <code>action_result.data.*.SHA-1</code>
+      </td>
+      <td>String</td>
+      <td>The SHA-1 hash associated with the file.</td>
+    </tr>
+    <tr>
+      <td>
+        <code>action_result.data.*.SHA-256</code>
+      </td>
+      <td>String</td>
+      <td>The SHA-256 hash associated with the file.</td>
+    </tr>
+    <tr>
+      <td>
+        <code>action_result.data.*.SHA-512</code>
+      </td>
+      <td>String</td>
+      <td>The SHA-512 hash associated with the file.</td>
+    </tr>
+    <tr>
+      <td>
+        <code>action_result.data.*.source</code>
+      </td>
+      <td>String</td>
+      <td>The source dataset that supplied the record.</td>
+    </tr>
+    <tr>
+      <td>
+        <code>action_result.data.*.db</code>
+      </td>
+      <td>String</td>
+      <td>The CIRCL database containing the record.</td>
+    </tr>
+    <tr>
+      <td>
+        <code>action_result.data.*.hashlookup:trust</code>
+      </td>
+      <td>Numeric</td>
+      <td>
+        CIRCL trust value from 0 through 100. This provides
+        context and is not a malware verdict.
+      </td>
+    </tr>
+    <tr>
+      <td>
+        <code>action_result.data.*.mimetype</code>
+      </td>
+      <td>String</td>
+      <td>The file's MIME type, when available.</td>
+    </tr>
+    <tr>
+      <td>
+        <code>action_result.data.*.ProductCode.ProductName</code>
+      </td>
+      <td>String</td>
+      <td>The software product associated with the file.</td>
+    </tr>
+    <tr>
+      <td>
+        <code>action_result.data.*.ProductCode.ProductVersion</code>
+      </td>
+      <td>String</td>
+      <td>The associated software product version.</td>
+    </tr>
+    <tr>
+      <td>
+        <code>action_result.data.*.PackageName</code>
+      </td>
+      <td>String</td>
+      <td>The package containing the file.</td>
+    </tr>
+    <tr>
+      <td>
+        <code>action_result.data.*.PackageVersion</code>
+      </td>
+      <td>String</td>
+      <td>The package version.</td>
+    </tr>
+    <tr>
+      <td>
+        <code>action_result.data.*.PackageDescription</code>
+      </td>
+      <td>String</td>
+      <td>A description of the package containing the file.</td>
+    </tr>
+    <tr>
+      <td>
+        <code>action_result.data.*.parents.*.PackageName</code>
+      </td>
+      <td>String</td>
+      <td>The name of a parent package associated with the file.</td>
+    </tr>
+    <tr>
+      <td>
+        <code>action_result.data.*.parents.*.PackageVersion</code>
+      </td>
+      <td>String</td>
+      <td>The version of a parent package.</td>
+    </tr>
+    <tr>
+      <td>
+        <code>action_result.data.*.parents.*.PackageDescription</code>
+      </td>
+      <td>String</td>
+      <td>A description of a parent package.</td>
+    </tr>
+  </tbody>
+</table>
+<p>
+  An asterisk (<code>*</code>) represents every item in a returned list.
+  For example, <code>parents.*.PackageDescription</code> retrieves the
+  description from each parent package returned by CIRCL.
+</p>
+<h3>Privacy</h3>
+<p>
+  Hash values submitted to this action are sent to the public CIRCL
+  hashlookup service.
+</p>
+<h3>Service availability</h3>
+<p>CIRCL provides the public hashlookup service on a best-effort basis.</p>
+<h3>References</h3>
+<ul>
+  <li>
+    <a href="https://www.circl.lu/services/hashlookup/">CIRCL hashlookup documentation</a>
+  </li>
+</ul>
+<p>
+  This is an independent integration and is not an official CIRCL
+  application.
+</p>

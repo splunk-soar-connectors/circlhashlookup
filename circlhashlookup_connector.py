@@ -1,6 +1,6 @@
-# File: circlhashlookup_connector.py
-#
-# Copyright (c) 2025 Splunk Inc.
+#!/usr/bin/env python3
+
+# Copyright (c) 2026 Splunk Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -8,138 +8,184 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 #
-# Unless required by applicable law or agreed to in writing, software distributed under
-# the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
-# either express or implied. See the License for the specific language governing permissions
-# and limitations under the License.
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 import phantom.app as phantom
 import requests
 from phantom.action_result import ActionResult
 from phantom.base_connector import BaseConnector
 
-from circlhashlookup_consts import (
-    CIRCLHASHLOOKUP_CONNECTIVITY_ENDPOINT,
-    CIRCLHASHLOOKUP_ERR_CONNECTIVITY_TEST,
-    CIRCLHASHLOOKUP_SUCC_CONNECTIVITY_TEST,
-)
+
+BASE_URL = "https://hashlookup.circl.lu"
+REQUEST_TIMEOUT = 30
+
+# Hash length: (CIRCL URL name, CIRCL response field)
+HASH_TYPES = {
+    32: ("md5", "MD5"),
+    40: ("sha1", "SHA-1"),
+    64: ("sha256", "SHA-256"),
+}
 
 
-class CirclhashlookupConnector(BaseConnector):
-    """
-    Circlhashlookup connector class that serves as a starting point for new connectors.
-    """
+class RetVal(tuple):
+    def __new__(cls, status, data=None):
+        return tuple.__new__(cls, (status, data))
 
+
+class CirclHashLookupConnector(BaseConnector):
     def __init__(self):
         super().__init__()
-        self._base_url = None
-        self._api_key = None
-        self._verify = False
+        self._state = None
+        self._base_url = BASE_URL
 
-    def _make_rest_call(self, endpoint, action_result, headers=None, params=None, data=None, json=None, method="get"):
-        """
-        Helper function to make REST calls for the connector.
-        """
-        try:
-            url = f"{self._base_url}{endpoint}"
-            self.debug_print(f"Making REST call to: {url}")
-
-            request_func = getattr(requests, method.lower())
-
-            response = request_func(url, json=json, data=data, headers=headers, params=params, verify=self._verify)
-
-            # Add debug data
-            if hasattr(action_result, "add_debug_data"):
-                action_result.add_debug_data({"r_status_code": response.status_code})
-                action_result.add_debug_data({"r_text": response.text})
-                action_result.add_debug_data({"r_headers": response.headers})
-
-            # Process response
-            if 200 <= response.status_code < 300:
-                try:
-                    if response.text:
-                        return phantom.APP_SUCCESS, response.json()
-                    return phantom.APP_SUCCESS, {}
-                except ValueError:
-                    return phantom.APP_SUCCESS, response.text
-
-            # Error handling
-            error_message = f"Error from server. Status Code: {response.status_code}"
-            if response.text:
-                try:
-                    resp_json = response.json()
-                    error_message = f"Error from server. Status Code: {response.status_code}. Error: {resp_json.get('error', 'Unknown error')}"
-                except ValueError:
-                    error_message = f"Error from server. Status Code: {response.status_code}. Error: {response.text}"
-
-            return action_result.set_status(phantom.APP_ERROR, error_message), None
-
-        except Exception as e:
-            return action_result.set_status(phantom.APP_ERROR, f"Error making REST call: {e!s}"), None
-
-    def _handle_test_connectivity(self, param):
-        """
-        Validate the asset configuration for connectivity using supplied credentials.
-        """
-        action_result = self.add_action_result(ActionResult(dict(param)))
-        self.save_progress("Connecting to instance...")
-
-        # Example test connectivity code
-        endpoint = CIRCLHASHLOOKUP_CONNECTIVITY_ENDPOINT
-        headers = {"Authorization": f"Bearer {self._api_key}"}
-
-        ret_val, _ = self._make_rest_call(endpoint, action_result, headers=headers)
-
-        if phantom.is_fail(ret_val):
-            self.save_progress(CIRCLHASHLOOKUP_ERR_CONNECTIVITY_TEST)
-            return action_result.get_status()
-
-        self.save_progress(CIRCLHASHLOOKUP_SUCC_CONNECTIVITY_TEST)
-        return action_result.set_status(phantom.APP_SUCCESS)
-
-    def initialize(self):
-        """
-        Initialize the connector.
-        """
-        self.debug_print("Initializing connector")
+    def _make_rest_call(self, endpoint, action_result):
         config = self.get_config()
 
-        # Get configuration parameters
-        self._base_url = config.get("host")
-        self._api_key = config.get("api_key")
-        self._verify = config.get("verify_server_cert", False)
+        try:
+            response = requests.get(
+                self._base_url + endpoint,
+                headers={"Accept": "application/json"},
+                timeout=REQUEST_TIMEOUT,
+                verify=config.get("verify_server_cert", True),
+            )
+        except requests.exceptions.RequestException as exc:
+            return RetVal(
+                action_result.set_status(
+                    phantom.APP_ERROR,
+                    f"Error connecting to CIRCL: {exc!s}",
+                )
+            )
 
-        return phantom.APP_SUCCESS
+        if hasattr(action_result, "add_debug_data"):
+            action_result.add_debug_data({"r_status_code": response.status_code})
+            action_result.add_debug_data({"r_text": response.text})
+            action_result.add_debug_data({"r_headers": dict(response.headers)})
+
+        content_type = response.headers.get("Content-Type", "").lower()
+
+        # A lookup that returns 404 completed successfully but found no record.
+        if response.status_code == 404 and endpoint.startswith("/lookup/") and "json" in content_type:
+            return RetVal(phantom.APP_SUCCESS, None)
+
+        try:
+            response_data = response.json()
+        except ValueError:
+            response_text = response.text.replace("{", "{{").replace("}", "}}")
+            return RetVal(
+                action_result.set_status(
+                    phantom.APP_ERROR,
+                    f"CIRCL returned HTTP {response.status_code}: {response_text}",
+                )
+            )
+
+        if 200 <= response.status_code < 300:
+            return RetVal(phantom.APP_SUCCESS, response_data)
+
+        response_text = response.text.replace("{", "{{").replace("}", "}}")
+        return RetVal(
+            action_result.set_status(
+                phantom.APP_ERROR,
+                f"CIRCL returned HTTP {response.status_code}: {response_text}",
+            )
+        )
+
+    def _handle_test_connectivity(self, param):
+        action_result = self.add_action_result(ActionResult(dict(param)))
+        self.save_progress("Connecting to CIRCL hashlookup")
+
+        ret_val, response = self._make_rest_call("/info", action_result)
+        if phantom.is_fail(ret_val):
+            self.save_progress("Test Connectivity Failed")
+            return action_result.get_status()
+
+        if not isinstance(response, dict) or "stat:hashlookup_total_keys" not in response:
+            return action_result.set_status(
+                phantom.APP_ERROR,
+                "CIRCL returned an unexpected response from /info.",
+            )
+
+        self.save_progress("Test Connectivity Passed")
+        return action_result.set_status(
+            phantom.APP_SUCCESS,
+            "Successfully connected to CIRCL hashlookup.",
+        )
+
+    def _handle_file_reputation(self, param):
+        action_result = self.add_action_result(ActionResult(dict(param)))
+
+        hash_value = param.get("hash")
+        if not isinstance(hash_value, str):
+            return action_result.set_status(phantom.APP_ERROR, "The hash must be a string.")
+
+        hash_value = hash_value.strip().lower()
+        hash_info = HASH_TYPES.get(len(hash_value))
+
+        if hash_info is None or any(character not in "0123456789abcdef" for character in hash_value):
+            return action_result.set_status(
+                phantom.APP_ERROR,
+                "Enter a valid hexadecimal MD5, SHA-1, or SHA-256 hash.",
+            )
+
+        hash_type, response_hash_field = hash_info
+        self.save_progress(f"Looking up {hash_type.upper()} hash in CIRCL")
+
+        endpoint = f"/lookup/{hash_type}/{hash_value}"
+        ret_val, response = self._make_rest_call(endpoint, action_result)
+
+        if phantom.is_fail(ret_val):
+            return action_result.get_status()
+
+        if response is None:
+            action_result.update_summary({"hash": hash_value, "hash_type": hash_type, "found": False})
+            return action_result.set_status(
+                phantom.APP_SUCCESS,
+                "Hash not found in CIRCL hashlookup.",
+            )
+
+        if not isinstance(response, dict) or str(response.get(response_hash_field, "")).lower() != hash_value:
+            return action_result.set_status(
+                phantom.APP_ERROR,
+                "CIRCL returned an unexpected lookup response.",
+            )
+
+        action_result.add_data(response)
+        summary = action_result.update_summary({"hash": hash_value, "hash_type": hash_type, "found": True})
+
+        for response_field, summary_field in {
+            "FileName": "file_name",
+            "FileSize": "file_size",
+            "source": "source",
+            "db": "database",
+            "hashlookup:trust": "trust_score",
+        }.items():
+            value = response.get(response_field)
+            if value is not None:
+                summary[summary_field] = value
+
+        return action_result.set_status(
+            phantom.APP_SUCCESS,
+            "Hash found in CIRCL hashlookup.",
+        )
 
     def handle_action(self, param):
-        """
-        Dispatcher for actions.
-        """
-        self.debug_print("action_id ", self.get_action_identifier())
+        action_id = self.get_action_identifier()
+        self.debug_print("action_id", action_id)
 
-        action_mapping = {
-            "test_connectivity": self._handle_test_connectivity,
-            # Add more action handlers here
-        }
+        if action_id == "file_reputation":
+            return self._handle_file_reputation(param)
+        if action_id == "test_connectivity":
+            return self._handle_test_connectivity(param)
 
-        action = self.get_action_identifier()
-        action_execution_status = phantom.APP_SUCCESS
+        return phantom.APP_ERROR
 
-        if action in action_mapping:
-            action_function = action_mapping[action]
-            action_execution_status = action_function(param)
+    def initialize(self):
+        self._state = self.load_state()
+        return phantom.APP_SUCCESS
 
-        return action_execution_status
-
-
-if __name__ == "__main__":
-    import sys
-
-    import pudb
-
-    pudb.set_trace()
-
-    connector = CirclhashlookupConnector()
-    connector.print_progress_message = True
-
-    sys.exit(0)
+    def finalize(self):
+        self.save_state(self._state)
+        return phantom.APP_SUCCESS
